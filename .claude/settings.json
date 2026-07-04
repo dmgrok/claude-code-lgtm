@@ -10,6 +10,10 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "command": ".claude/hooks/lgtm-validate.sh"
       }
     ],
     "PreToolUse": [
@@ -22,6 +26,10 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "command": ".claude/hooks/lgtm-precommit.sh"
       }
     ]
   }

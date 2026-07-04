@@ -1,8 +1,7 @@
 /**
  * GitHub Action Entry Point
  *
- * This is the entry point for running as a GitHub Action.
- * It reads inputs, runs validation, and sets outputs.
+ * Runs the LGTM rule-based project health checks and reports results.
  */
 export {};
 //# sourceMappingURL=action.d.ts.map

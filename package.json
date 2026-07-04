@@ -1,12 +1,12 @@
 {
-  "name": "lgtm-agent-skills",
+  "name": "lgtm",
   "version": "1.0.0",
-  "description": "LGTM (Looks Good To Me) - Agent Skills validation, security scanning, and quality analysis",
+  "description": "LGTM — Claude Code project health checks",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "lgtm-skills": "./dist/cli.js"
+    "lgtm": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc",

@@ -1,56 +1,34 @@
 #!/usr/bin/env node
-/**
- * LGTM Agent Skills CLI
- *
- * A CLI tool for validating Agent Skills with scoring and KPI breakdown.
- *
- * Usage:
- *   lgtm-skills validate <path>    Validate skill(s) and output score
- *   lgtm-skills scan <path>        Security scan only
- *   lgtm-skills scaffold <name>    Create a new skill template
- *
- * Options:
- *   --format <cli|json|github>     Output format (default: cli)
- *   --min-score <number>           Minimum passing score (default: 70)
- *   --verbose                      Show detailed output
- *   --help                         Show help
- */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { SkillAnalyzer, AnalyzerOptions, parseSkillFile } from './analyzer.js';
-import { SecurityScanner } from './scanners/index.js';
-import { SkillScaffolder } from './scanners/index.js';
-import { formatScoreForGitHubAction } from './scoring.js';
+import { fileURLToPath } from 'url';
+import { scanProject } from './project-scanner.js';
+import { runRules } from './rule-engine.js';
+import { formatResults, OutputFormat } from './reporter.js';
+import { ALL_RULES } from './rules/index.js';
+import { Severity } from './rules/types.js';
 
-// ============================================================================
-// Argument Parsing
-// ============================================================================
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 interface CLIArgs {
   command: string;
-  paths: string[];
-  format: 'cli' | 'json' | 'github';
-  minScore: number;
-  verbose: boolean;
+  path?: string;
+  format: OutputFormat;
+  rule?: string;
+  severity?: Severity;
   help: boolean;
-  skipDuplicates: boolean;
-  enableLakera: boolean;
-  lakeraApiKey?: string;
+  version: boolean;
 }
 
 function parseArgs(argv: string[]): CLIArgs {
   const args = argv.slice(2);
   const result: CLIArgs = {
-    command: '',
-    paths: [],
+    command: 'check',
     format: 'cli',
-    minScore: 70,
-    verbose: false,
     help: false,
-    skipDuplicates: false,
-    enableLakera: false,
-    lakeraApiKey: undefined,
+    version: false,
   };
 
   let i = 0;
@@ -59,24 +37,23 @@ function parseArgs(argv: string[]): CLIArgs {
 
     if (arg === '--help' || arg === '-h') {
       result.help = true;
-    } else if (arg === '--verbose' || arg === '-v') {
-      result.verbose = true;
-    } else if (arg === '--skip-duplicates' || arg === '--offline') {
-      result.skipDuplicates = true;
-    } else if (arg === '--lakera') {
-      result.enableLakera = true;
-    } else if (arg === '--lakera-key') {
-      result.enableLakera = true;
-      result.lakeraApiKey = args[++i];
+    } else if (arg === '--version' || arg === '-V') {
+      result.version = true;
     } else if (arg === '--format' || arg === '-f') {
-      result.format = args[++i] as 'cli' | 'json' | 'github';
-    } else if (arg === '--min-score') {
-      result.minScore = parseInt(args[++i], 10);
+      result.format = args[++i] as OutputFormat;
+    } else if (arg === '--rule' || arg === '-r') {
+      result.rule = args[++i];
+    } else if (arg === '--severity' || arg === '-s') {
+      result.severity = args[++i] as Severity;
     } else if (!arg.startsWith('-')) {
-      if (!result.command) {
-        result.command = arg;
-      } else {
-        result.paths.push(arg);
+      if (!result.command || result.command === 'check') {
+        if (['check', 'scan', 'init'].includes(arg)) {
+          result.command = arg;
+        } else if (!result.path) {
+          result.path = arg;
+        }
+      } else if (!result.path) {
+        result.path = arg;
       }
     }
     i++;
@@ -87,379 +64,239 @@ function parseArgs(argv: string[]): CLIArgs {
 
 function printHelp(): void {
   console.log(`
-╔════════════════════════════════════════════════════════════════╗
-║           LGTM Agent Skills Validator v1.0.0                   ║
-╚════════════════════════════════════════════════════════════════╝
+lgtm - Claude Code project health tool
 
 USAGE:
-  lgtm-skills <command> [paths...] [options]
-
-COMMANDS:
-  validate <path>     Validate skill(s) and output score
-                      Path can be a SKILL.md file or directory
-  scan <path>         Run security scan only
-  scaffold <name>     Create a new skill template
+  lgtm                        Auto-discover and check everything
+  lgtm check [path]           Check project health (default command)
+  lgtm check --rule <filter>  Only run matching rules
+  lgtm check --format <fmt>   Output: cli (default), json, github
+  lgtm check --severity <s>   Minimum severity: error, warning, info
+  lgtm scan <path>            Security scan only (skill-security rules)
+  lgtm init                   Install hooks + /lgtm command into project
 
 OPTIONS:
-  -f, --format <fmt>  Output format: cli, json, github (default: cli)
-  --min-score <n>     Minimum passing score 0-100 (default: 70)
-  --skip-duplicates   Skip duplicate check against public registries
-  --offline           Alias for --skip-duplicates
-  --lakera            Enable Lakera Guard prompt injection detection
-                      (uses LAKERA_GUARD_API_KEY env var)
-  --lakera-key <key>  Lakera Guard API key (or use env var)
-  -v, --verbose       Show detailed scanner output
-  -h, --help          Show this help message
-
-DUPLICATE DETECTION:
-  By default, skills are checked against public registries:
-    - vercel-labs/agent-skills
-    - anthropics/skills
-    - remotion-dev/skills
-  
-  Use --skip-duplicates to run offline or speed up validation.
-
-LAKERA GUARD (Professional Prompt Injection Detection):
-  Enable with --lakera flag. Requires LAKERA_GUARD_API_KEY env var.
-  Get your free API key at: https://platform.lakera.ai/
-  
-  Lakera Guard detects:
-    - Prompt injection attacks
-    - Jailbreak attempts
-    - PII leakage
-    - Unknown/suspicious links
-
-EXAMPLES:
-  # Validate a single skill
-  lgtm-skills validate ./my-skill/SKILL.md
-
-  # Validate all skills in a directory
-  lgtm-skills validate ./skills/
-
-  # Validate with JSON output for CI
-  lgtm-skills validate ./skill --format json
-
-  # Validate with custom threshold
-  lgtm-skills validate ./skill --min-score 80
-
-  # Skip duplicate check (faster, works offline)
-  lgtm-skills validate ./skill --skip-duplicates
-
-  # Run as GitHub Action (outputs GitHub-flavored markdown)
-  lgtm-skills validate ./skill --format github
-
-EXIT CODES:
-  0    All skills passed validation
-  1    One or more skills failed validation
-  2    Invalid arguments or runtime error
+  -f, --format <fmt>     Output format: cli, json, github
+  -r, --rule <filter>    Only run rules matching this filter
+  -s, --severity <sev>   Minimum severity level
+  -h, --help             Show this help message
+  -V, --version          Show version
 `);
 }
 
-// ============================================================================
-// Commands
-// ============================================================================
-
-async function validateCommand(args: CLIArgs): Promise<number> {
-  if (args.paths.length === 0) {
-    console.error('Error: No path specified');
-    console.error('Usage: lgtm-skills validate <path>');
-    return 2;
-  }
-
-  const options: AnalyzerOptions = {
-    format: args.format,
-    verbose: args.verbose,
-    skipDuplicateCheck: args.skipDuplicates,
-    scoring: {
-      minGlobalScore: args.minScore,
-    },
-    security: {
-      verbose: args.verbose,
-      enableLakera: args.enableLakera,
-      lakeraApiKey: args.lakeraApiKey,
-    },
-  };
-
-  const analyzer = new SkillAnalyzer(options);
-  const skillPaths = resolveSkillPaths(args.paths);
-
-  if (skillPaths.length === 0) {
-    console.error('Error: No SKILL.md files found');
-    return 2;
-  }
-
-  let allPassed = true;
-  const results: Array<{ path: string; score: number; passed: boolean }> = [];
-
-  for (const skillPath of skillPaths) {
+function printVersion(): void {
+  try {
+    const pkgPath = path.resolve(__dirname, '..', 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    console.log(`lgtm v${pkg.version}`);
+  } catch {
+    const pkgPath = path.resolve(__dirname, '..', '..', 'package.json');
     try {
-      const result = await analyzer.analyze(skillPath);
-      const output = analyzer.formatResult(result);
-      console.log(output);
-
-      results.push({
-        path: skillPath,
-        score: result.score.globalScore,
-        passed: result.score.passed,
-      });
-
-      if (!result.score.passed) {
-        allPassed = false;
-      }
-
-      // For GitHub Actions format, set outputs
-      if (args.format === 'github') {
-        const ghResult = formatScoreForGitHubAction(result.score);
-        // Write to GITHUB_OUTPUT if available
-        const outputFile = process.env.GITHUB_OUTPUT;
-        if (outputFile) {
-          const outputs = Object.entries(ghResult.outputs)
-            .map(([k, v]) => `${k}=${v}`)
-            .join('\n');
-          fs.appendFileSync(outputFile, outputs + '\n');
-        }
-
-        // Write step summary if available
-        const summaryFile = process.env.GITHUB_STEP_SUMMARY;
-        if (summaryFile) {
-          fs.appendFileSync(summaryFile, ghResult.summary);
-        }
-
-        // Output annotations as workflow commands
-        for (const annotation of ghResult.annotations) {
-          console.log(`::${annotation.level}::${annotation.message}`);
-        }
-      }
-    } catch (error) {
-      console.error(`Error analyzing ${skillPath}:`, error);
-      allPassed = false;
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      console.log(`lgtm v${pkg.version}`);
+    } catch {
+      console.log('lgtm v1.0.0');
     }
   }
+}
 
-  // Summary for multiple files
-  if (skillPaths.length > 1 && args.format === 'cli') {
-    console.log('\n════════════════════════════════════════════════════════════════');
-    console.log('  SUMMARY');
-    console.log('════════════════════════════════════════════════════════════════');
-    const passed = results.filter((r) => r.passed).length;
-    const failed = results.filter((r) => !r.passed).length;
-    console.log(`  ✅ Passed: ${passed}`);
-    console.log(`  ❌ Failed: ${failed}`);
-    console.log(`  📊 Total:  ${results.length}`);
-    console.log('════════════════════════════════════════════════════════════════\n');
+const VALIDATE_HOOK = `#!/bin/bash
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_call.file_path // .file_path // empty')
+if [[ -z "$FILE_PATH" ]] || [[ "$(basename "$FILE_PATH")" != "SKILL.md" ]]; then
+  exit 0
+fi
+RESULT=$(lgtm check "$FILE_PATH" --format json 2>/dev/null) || exit 0
+PASSED=$(echo "$RESULT" | jq -r '.passed')
+if [[ "$PASSED" == "true" ]]; then
+  echo "{\\"continue\\": true, \\"systemMessage\\": \\"\\u2705 LGTM: $FILE_PATH \\u2014 no issues found.\\"}"
+else
+  ERRORS=$(echo "$RESULT" | jq -r '.errors')
+  echo "{\\"continue\\": true, \\"systemMessage\\": \\"\\u26a0\\ufe0f LGTM: $FILE_PATH \\u2014 $ERRORS error(s) found. Run /lgtm for details.\\"}"
+fi
+`;
+
+const PRECOMMIT_HOOK = `#!/bin/bash
+INPUT=$(cat)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
+COMMAND=$(echo "$INPUT" | jq -r '.tool_call.command // empty')
+if [[ "$TOOL_NAME" != "Bash" ]] || ! echo "$COMMAND" | grep -qE '^\\s*git\\s+commit'; then
+  exit 0
+fi
+STAGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep 'SKILL\\.md$') || exit 0
+[[ -z "$STAGED" ]] && exit 0
+FAILURES=""
+while IFS= read -r f; do
+  RESULT=$(lgtm check "$f" --format json 2>/dev/null) || continue
+  PASSED=$(echo "$RESULT" | jq -r '.passed')
+  [[ "$PASSED" != "true" ]] && FAILURES="$FAILURES\\n  \\u2022 $f"
+done <<< "$STAGED"
+if [[ -n "$FAILURES" ]]; then
+  echo "\\ud83d\\udeab LGTM: Failing skills block commit:$FAILURES" >&2
+  exit 2
+fi
+`;
+
+const LGTM_COMMAND = `---
+description: Run LGTM health checks on this project
+---
+
+Run \`lgtm check\` against the current project to validate Claude Code configuration and skills.
+
+## Instructions
+1. Run: \`lgtm check\`
+2. Display the full output to the user.
+3. If issues are found, explain each one and suggest fixes.
+`;
+
+async function checkCommand(args: CLIArgs): Promise<number> {
+  const files = await scanProject({ path: args.path });
+
+  if (!files.claudeDir && files.skillFiles.length === 0) {
+    console.log('No .claude/ directory or SKILL.md files found. Run `lgtm init` to set up hooks.');
+    return 0;
   }
 
-  return allPassed ? 0 : 1;
+  const options = {
+    rules: args.rule ? [args.rule] : undefined,
+    severity: args.severity,
+  };
+
+  const result = await runRules({ files }, ALL_RULES, options);
+  const output = formatResults(result, files, args.format);
+  console.log(output);
+
+  return result.passed ? 0 : 1;
 }
 
 async function scanCommand(args: CLIArgs): Promise<number> {
-  if (args.paths.length === 0) {
-    console.error('Error: No path specified');
-    console.error('Usage: lgtm-skills scan <path>');
-    return 2;
+  if (!args.path) {
+    console.error('Error: scan requires a path argument');
+    console.error('Usage: lgtm scan <path>');
+    process.exit(2);
   }
 
-  const skillPaths = resolveSkillPaths(args.paths);
-  const scanner = new SecurityScanner({ 
-    skipSecretDetection: false,
-    verbose: args.verbose,
-    enableLakera: args.enableLakera,
-    lakeraApiKey: args.lakeraApiKey,
-  });
+  const files = await scanProject({ path: args.path });
+  const options = { rules: ['skills'] };
+  const result = await runRules({ files }, ALL_RULES, options);
+  const output = formatResults(result, files, args.format);
+  console.log(output);
 
-  let hasFindings = false;
-
-  if (args.enableLakera && args.verbose) {
-    const hasKey = !!(args.lakeraApiKey || process.env.LAKERA_GUARD_API_KEY);
-    console.log(`Lakera Guard: ${hasKey ? 'enabled' : 'no API key found'}`);
-  }
-
-  for (const skillPath of skillPaths) {
-    try {
-      const content = fs.readFileSync(skillPath, 'utf-8');
-      const skill = parseSkillFile(content, skillPath);
-      const result = await scanner.scan(skill);
-
-      console.log(`\n🔒 Security Scan: ${skillPath}`);
-      console.log('─'.repeat(60));
-
-      if (result.findings.length === 0) {
-        console.log('✅ No security issues found');
-      } else {
-        hasFindings = true;
-        console.log(`Found ${result.findings.length} issue(s):\n`);
-
-        for (const finding of result.findings) {
-          const severity = finding.severity.toUpperCase();
-          const icon =
-            severity === 'CRITICAL'
-              ? '🔴'
-              : severity === 'HIGH'
-              ? '🟠'
-              : severity === 'MEDIUM'
-              ? '🟡'
-              : '🔵';
-          console.log(`${icon} [${severity}] ${finding.category}`);
-          console.log(`   ${finding.description}`);
-          if (finding.location) {
-            console.log(`   ${finding.location}`);
-          }
-          console.log('');
-        }
-      }
-
-      if (result.secretsResult) {
-        if (result.secretsResult.secretsDetected) {
-          console.log('🚨 SECRETS DETECTED!');
-          hasFindings = true;
-        } else {
-          console.log('✅ No secrets detected');
-        }
-      }
-    } catch (error) {
-      console.error(`Error scanning ${skillPath}:`, error);
-    }
-  }
-
-  return hasFindings ? 1 : 0;
+  return result.passed ? 0 : 1;
 }
 
-async function scaffoldCommand(args: CLIArgs): Promise<number> {
-  if (args.paths.length === 0) {
-    console.error('Error: No name specified');
-    console.error('Usage: lgtm-skills scaffold <name>');
-    return 2;
+async function initCommand(targetPath?: string): Promise<number> {
+  const projectRoot = targetPath ? path.resolve(targetPath) : process.cwd();
+  const claudeDir = path.join(projectRoot, '.claude');
+  const hooksDir = path.join(claudeDir, 'hooks');
+  const commandsDir = path.join(claudeDir, 'commands');
+  const settingsPath = path.join(claudeDir, 'settings.json');
+
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.mkdirSync(commandsDir, { recursive: true });
+
+  const validatePath = path.join(hooksDir, 'lgtm-validate.sh');
+  fs.writeFileSync(validatePath, VALIDATE_HOOK);
+  fs.chmodSync(validatePath, 0o755);
+
+  const precommitPath = path.join(hooksDir, 'lgtm-precommit.sh');
+  fs.writeFileSync(precommitPath, PRECOMMIT_HOOK);
+  fs.chmodSync(precommitPath, 0o755);
+
+  const commandPath = path.join(commandsDir, 'lgtm.md');
+  fs.writeFileSync(commandPath, LGTM_COMMAND);
+
+  const hookConfig = {
+    hooks: {
+      PostToolUse: [
+        {
+          matcher: 'Edit|Write',
+          command: `.claude/hooks/lgtm-validate.sh`,
+        },
+      ],
+      PreToolUse: [
+        {
+          matcher: 'Bash',
+          command: `.claude/hooks/lgtm-precommit.sh`,
+        },
+      ],
+    },
+  };
+
+  if (fs.existsSync(settingsPath)) {
+    const existing = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    if (!existing.hooks) {
+      existing.hooks = {};
+    }
+    if (!existing.hooks.PostToolUse) {
+      existing.hooks.PostToolUse = [];
+    }
+    if (!existing.hooks.PreToolUse) {
+      existing.hooks.PreToolUse = [];
+    }
+
+    const hasValidate = existing.hooks.PostToolUse.some(
+      (h: { command?: string }) => h.command?.includes('lgtm-validate')
+    );
+    if (!hasValidate) {
+      existing.hooks.PostToolUse.push(hookConfig.hooks.PostToolUse[0]);
+    }
+
+    const hasPrecommit = existing.hooks.PreToolUse.some(
+      (h: { command?: string }) => h.command?.includes('lgtm-precommit')
+    );
+    if (!hasPrecommit) {
+      existing.hooks.PreToolUse.push(hookConfig.hooks.PreToolUse[0]);
+    }
+
+    fs.writeFileSync(settingsPath, JSON.stringify(existing, null, 2) + '\n');
+  } else {
+    fs.writeFileSync(settingsPath, JSON.stringify(hookConfig, null, 2) + '\n');
   }
 
-  const name = args.paths[0];
-  const scaffolder = new SkillScaffolder();
+  console.log(`
+lgtm initialized successfully!
 
-  try {
-    const result = scaffolder.scaffold({
-      name,
-      description: `${name} skill`,
-      includeTests: true,
-      includeScripts: true,
-    });
+Created:
+  .claude/hooks/lgtm-validate.sh    (post-edit hook)
+  .claude/hooks/lgtm-precommit.sh   (pre-commit hook)
+  .claude/commands/lgtm.md          (/lgtm slash command)
+  .claude/settings.json             (hook configuration)
 
-    // Create the directory and files
-    const skillDir = path.join(process.cwd(), name);
-    if (!fs.existsSync(skillDir)) {
-      fs.mkdirSync(skillDir, { recursive: true });
-    }
+Hooks will automatically:
+  - Validate SKILL.md files after edits
+  - Block commits with failing skills
 
-    // Write SKILL.md
-    const skillMdPath = path.join(skillDir, 'SKILL.md');
-    fs.writeFileSync(skillMdPath, result.skillMd);
+Use /lgtm in Claude Code to run checks manually.
+`);
 
-    // Create directories
-    for (const dir of result.directories) {
-      const dirPath = path.join(skillDir, dir);
-      if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true });
-      }
-    }
-
-    // Write test cases if present
-    if (result.testCasesYaml) {
-      const testDir = path.join(skillDir, 'test');
-      if (!fs.existsSync(testDir)) {
-        fs.mkdirSync(testDir, { recursive: true });
-      }
-      fs.writeFileSync(path.join(testDir, 'cases.yaml'), result.testCasesYaml);
-    }
-
-    console.log(`\n✅ Skill scaffolded successfully!`);
-    console.log(`\nCreated:`);
-    console.log(`  📄 ${name}/SKILL.md`);
-    for (const dir of result.directories) {
-      console.log(`  📁 ${name}/${dir}/`);
-    }
-    if (result.testCasesYaml) {
-      console.log(`  📄 ${name}/test/cases.yaml`);
-    }
-    console.log(`\nNext steps:`);
-    console.log(`  1. Edit ${name}/SKILL.md with your skill content`);
-    console.log(`  2. Run: lgtm-skills validate ./${name}`);
-    return 0;
-  } catch (error) {
-    console.error(`❌ Failed to scaffold: ${error}`);
-    return 2;
-  }
+  return 0;
 }
-
-// ============================================================================
-// Utilities
-// ============================================================================
-
-/**
- * Resolve paths to SKILL.md files
- */
-function resolveSkillPaths(paths: string[]): string[] {
-  const skillPaths: string[] = [];
-
-  for (const p of paths) {
-    const resolved = path.resolve(p);
-
-    if (!fs.existsSync(resolved)) {
-      console.error(`Warning: Path not found: ${resolved}`);
-      continue;
-    }
-
-    const stat = fs.statSync(resolved);
-
-    if (stat.isFile()) {
-      if (resolved.endsWith('SKILL.md')) {
-        skillPaths.push(resolved);
-      } else {
-        console.error(`Warning: Expected SKILL.md file: ${resolved}`);
-      }
-    } else if (stat.isDirectory()) {
-      // Check for SKILL.md in the directory
-      const skillMdPath = path.join(resolved, 'SKILL.md');
-      if (fs.existsSync(skillMdPath)) {
-        skillPaths.push(skillMdPath);
-      } else {
-        // Look for subdirectories with SKILL.md
-        const entries = fs.readdirSync(resolved, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isDirectory()) {
-            const subSkillPath = path.join(resolved, entry.name, 'SKILL.md');
-            if (fs.existsSync(subSkillPath)) {
-              skillPaths.push(subSkillPath);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return skillPaths;
-}
-
-// ============================================================================
-// Main Entry Point
-// ============================================================================
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv);
 
-  if (args.help || !args.command) {
+  if (args.version) {
+    printVersion();
+    process.exit(0);
+  }
+
+  if (args.help) {
     printHelp();
-    process.exit(args.help ? 0 : 2);
+    process.exit(0);
   }
 
   let exitCode: number;
 
   switch (args.command) {
-    case 'validate':
-      exitCode = await validateCommand(args);
+    case 'check':
+      exitCode = await checkCommand(args);
       break;
     case 'scan':
       exitCode = await scanCommand(args);
       break;
-    case 'scaffold':
-      exitCode = await scaffoldCommand(args);
+    case 'init':
+      exitCode = await initCommand(args.path);
       break;
     default:
       console.error(`Unknown command: ${args.command}`);

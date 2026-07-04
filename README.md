@@ -1,416 +1,159 @@
-# LGTM Agent Skills
+# LGTM
 
-**Looks Good To Me** - A validation, security scanning, and quality analysis tool for Agent Skills.
-
-## Overview
-
-LGTM Agent Skills provides comprehensive tooling for validating AI agent skills according to the [Agent Skills Specification](https://agentskills.io/specification). It can be used as a **CLI tool** or **GitHub Action**.
-
-### Features
-
-- **Scoring System** - Global score (0-100) with 5 KPI breakdown
-- **Spec Compliance Validation** - Deterministic validation against the official Agent Skills spec
-- **Security Scanner** - Based on [Cisco AI Defense skill-scanner](https://github.com/cisco-ai-defense/skill-scanner) threat taxonomy
-- **Lakera Guard Integration** - Optional professional prompt injection detection via [Lakera API](https://lakera.ai)
-- **Secret Detection** - Uses industry-standard tools (gitleaks, trufflehog) instead of regex
-- **Duplicate Detection** - Checks against 1000+ skills from [skills.sh](https://skills.sh) registry
-- **Circular Dependency Detection** - DFS-based cycle detection for skill dependencies
-- **Test Validation** - Checks for test cases and dependencies
-- **GitHub Action** - Integrates into CI/CD pipelines
-- **Claude Code Hooks** - Real-time validation as you edit, pre-commit gates, and `/lgtm` command
-
-## Installation
+**Claude Code project health checks.** Validates your `.claude/` configuration, hooks, commands, and skills in one pass.
 
 ```bash
-npm install
-npm run build
+npx lgtm
 ```
 
-### Global CLI Installation
+```
+  LGTM — Claude Code Project Health
+  ──────────────────────────────────────────────────
+
+  .claude/settings.json
+    ✓ Valid schema
+    ✓ Hook events are valid
+
+  .claude/hooks/
+    ✓ lgtm-validate.sh is executable
+    ✓ lgtm-precommit.sh is executable
+
+  .claude/commands/
+    ✓ lgtm.md has description frontmatter
+
+  skills/my-skill/SKILL.md
+    ✓ Spec compliant
+    ✓ Security: clean
+
+  ──────────────────────────────────────────────────
+  0 errors, 0 warnings  ✓
+```
+
+## What It Checks
+
+| Rule | What it validates |
+|------|-------------------|
+| **Settings lint** | `.claude/settings.json` — valid hook events, matcher syntax, hook types, timeouts, command existence |
+| **Hooks lint** | `.claude/hooks/*.sh` — executable permissions, stdin handling, dangerous patterns, hardcoded secrets |
+| **Commands lint** | `.claude/commands/*.md` — frontmatter, description field, prompt injection, file size |
+| **Skill spec** | `SKILL.md` files — [Agent Skills spec](https://agentskills.io/specification) compliance (name format, description, frontmatter) |
+| **Skill security** | `SKILL.md` files — prompt injection, code injection, data exfiltration, secrets ([Cisco AI Defense](https://github.com/cisco-ai-defense/skill-scanner) taxonomy) |
+
+## Install
 
 ```bash
-npm install -g .
-lgtm-skills --help
+# Try it (zero install):
+npx lgtm
+
+# Add hooks to your project:
+npx lgtm init
+
+# Global install:
+npm install -g lgtm
 ```
 
-### Secret Detection Tools (Recommended)
+### `lgtm init`
 
-For best secret detection accuracy, install one of these tools:
+Installs Claude Code hooks into your project:
 
-```bash
-# Option 1: Gitleaks (recommended)
-brew install gitleaks
-
-# Option 2: TruffleHog
-brew install trufflehog
-
-# The scanner will use these automatically if available,
-# otherwise falls back to pattern-based detection.
-```
-
-### Lakera Guard (Optional)
-
-For professional-grade prompt injection detection, get a free API key from [Lakera](https://platform.lakera.ai/):
-
-```bash
-# Set environment variable
-export LAKERA_GUARD_API_KEY=your-api-key
-
-# Or pass directly
-lgtm-skills validate ./skill --lakera-key your-api-key
-```
-
-Lakera Guard detects:
-- **Prompt injection attacks** - Attempts to manipulate AI behavior
-- **Jailbreak attempts** - Bypassing safety guidelines
-- **PII leakage** - Personal identifiable information
-- **Malicious links** - Unknown or suspicious URLs
+- **Post-edit hook** — validates SKILL.md after every edit
+- **Pre-commit gate** — blocks `git commit` if skills fail validation
+- **`/lgtm` command** — on-demand health check from Claude Code
 
 ## CLI Usage
 
-### Validate a Skill
-
 ```bash
-# Validate a single skill
-lgtm-skills validate ./my-skill/
-
-# Validate with custom threshold
-lgtm-skills validate ./my-skill --min-score 80
-
-# Skip duplicate check (faster, works offline)
-lgtm-skills validate ./my-skill --skip-duplicates
-
-# JSON output for CI
-lgtm-skills validate ./my-skill --format json
-
-# GitHub format (for Actions)
-lgtm-skills validate ./my-skill --format github
-```
-
-### Example Output
-
-```
-═══════════════════════════════════════════════════════════════
-  LGTM Agent Skills Validator - Score: 92/100
-═══════════════════════════════════════════════════════════════
-
-✅ Spec Compliance        [████████████████████] 100/100 (weight: 35%)
-   ✓ Passes Agent Skills specification | ✓ No spec errors
-
-✅ Security               [████████████████████] 100/100 (weight: 35%)
-   ✓ No security issues detected
-
-✅ Content Quality        [████████████████░░░░] 80/100 (weight: 10%)
-   ✓ Contains examples | ✓ Contains instructions/steps
-
-✅ Testing & Dependencies [██████████████░░░░░░] 70/100 (weight: 10%)
-   ⚠️ No test cases defined
-
-✅ Originality            [████████████████████] 100/100 (weight: 10%)
-   ✓ No duplicates found in skills.sh registry
-
-───────────────────────────────────────────────────────────────
-  ✅ Score: 92/100 - Skill passes validation
-───────────────────────────────────────────────────────────────
-```
-
-### Security Scan Only
-
-```bash
-lgtm-skills scan ./my-skill/
-```
-
-### Scaffold a New Skill
-
-```bash
-lgtm-skills scaffold my-new-skill
+lgtm                          # Auto-discover and check everything
+lgtm check [path]             # Check project health
+lgtm check --rule hooks       # Only run hooks rules
+lgtm check --rule settings    # Only run settings rules
+lgtm check --rule skills      # Only run skill rules
+lgtm check --format json      # Machine-readable output
+lgtm check --format github    # GitHub Actions annotations
+lgtm scan <path>              # Security scan only
+lgtm init [path]              # Install hooks into a project
 ```
 
 ## GitHub Action
 
-Add to your workflow:
-
 ```yaml
-name: Validate Skills
+name: LGTM Health Check
 on: [push, pull_request]
 
 jobs:
-  validate:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - uses: dmgrok/LGTM_agent_skills@v1
-        id: lgtm
+      - uses: dmgrok/LGTM_agent_skills@v2
         with:
-          path: './skills/SKILL.md'
-          min-score: 70
-      
-      # Upload results artifact (always runs, even on failure)
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: lgtm-validation-results
-          path: lgtm-results.json
-```
-
-### With Lakera Guard
-
-For enhanced prompt injection detection:
-
-```yaml
-name: Validate Skills (with Lakera)
-on: [push, pull_request]
-
-jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - uses: dmgrok/LGTM_agent_skills@v1
-        id: lgtm
-        with:
-          path: './skills/SKILL.md'
-          min-score: 70
-          lakera-api-key: ${{ secrets.LAKERA_GUARD_API_KEY }}
-      
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: lgtm-validation-results
-          path: lgtm-results.json
-```
-
-### Scan Only Mode (No Failure)
-
-To scan without failing the workflow, useful for generating reports:
-
-```yaml
-name: Scan Skills
-on: [push, pull_request]
-
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - uses: dmgrok/LGTM_agent_skills@v1
-        id: lgtm
-        with:
-          path: './skills/SKILL.md'
-          min-score: 70
-          fail-on-error: false  # Don't fail the workflow
-      
-      # Always upload results for analysis
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: lgtm-scan-results
-          path: lgtm-results.json
+          path: '.'
+          fail-on-error: true
 ```
 
 ### Inputs
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `path` | Path to SKILL.md file or directory | `.` |
-| `min-score` | Minimum score to pass (0-100) | `70` |
-| `fail-on-error` | Fail the action if validation fails | `true` |
-| `skip-duplicates` | Skip duplicate check against public registries | `false` |
+| `path` | Path to check | `.` |
+| `fail-on-error` | Fail the action on errors | `true` |
 | `lakera-api-key` | Lakera Guard API key for prompt injection detection | `''` |
-
-**Note:** Set `fail-on-error: false` to scan without failing the workflow. This is useful for:
-- Generating reports without blocking CI/CD
-- Collecting validation data over time
-- Gradual adoption in legacy projects
 
 ### Outputs
 
 | Output | Description |
 |--------|-------------|
-| `score` | Global validation score (0-100) |
-| `passed` | Whether validation passed (true/false) |
-| `spec-compliance` | Spec compliance KPI score |
-| `security` | Security KPI score |
-| `content` | Content quality KPI score |
-| `testing` | Testing & dependencies KPI score |
-| `originality` | Originality KPI score (duplicate detection) |
-| `results-file` | Path to JSON results file (for artifacts) |
+| `passed` | Whether all checks passed (true/false) |
+| `score` | 100 if passed, 0 if failed (backwards compat) |
+| `results-file` | Path to JSON results file |
 
-**Artifact Output:** The action creates `lgtm-results.json` with complete validation data. Use `actions/upload-artifact@v4` with `if: always()` to capture results even when validation fails.
+## Security Scanner
 
-## Scoring System
+The security scanner uses the [Cisco AI Defense threat taxonomy](https://github.com/cisco-ai-defense/skill-scanner) with optional professional detection:
 
-The global score is a weighted average of five KPIs:
-
-| KPI | Weight | Description |
-|-----|--------|-------------|
-| **Spec Compliance** | 35% | Valid frontmatter, name format, description |
-| **Security** | 35% | No threats, secrets, or malicious patterns |
-| **Content Quality** | 10% | Word count, examples, instructions |
-| **Testing** | 10% | Test cases, dependency validation |
-| **Originality** | 10% | No duplicates in [skills.sh](https://skills.sh) registry |
-
-### Scoring Rules
-
-- **Critical security issues**: -50 points
-- **High security issues**: -25 points
-- **Spec errors**: -25 points each
-- **Spec warnings**: -5 points each
-- **No tests defined**: -30 points
-- **No examples**: -15 points
-- **Exact duplicate found**: -50 points
-- **Similar skill found**: -25 points
-
-## Duplicate Detection
-
-LGTM connects to the [skills.sh](https://skills.sh) API to check your skill against **1000+ published skills**:
+- **Pattern-based detection** — prompt injection, code injection, data exfiltration, tool abuse, privilege escalation
+- **[Lakera Guard](https://lakera.ai)** — ML-based prompt injection detection (optional, free tier available)
+- **[gitleaks](https://github.com/gitleaks/gitleaks) / [trufflehog](https://github.com/trufflesecurity/trufflehog)** — Secret detection (uses external tools when available)
 
 ```bash
-# Check if your skill duplicates an existing one
-lgtm-skills validate ./my-skill/
+# Install secret detection tools (recommended):
+brew install gitleaks
 
-# Skip duplicate check (faster, offline mode)
-lgtm-skills validate ./my-skill/ --skip-duplicates
-```
-
-The registry includes skills from:
-- vercel-labs/agent-skills
-- anthropics/skills
-- expo/skills
-- supabase/agent-skills
-- And 100+ more repositories...
-
-## Architecture
-
-```
-src/
-  cli.ts                      # CLI entry point
-  action.ts                   # GitHub Action entry point
-  analyzer.ts                 # Main analysis orchestrator
-  scoring.ts                  # Scoring calculation (5 KPIs)
-  registry.ts                 # skills.sh API integration
-  index.ts                    # Package exports
-  scanners/
-    types.ts                  # Shared types and interfaces
-    spec-validator.ts         # Agent Skills spec validation
-    security-scanner.ts       # Security threats and secrets
-    dependency-validator.ts   # Dependencies and tests
-    test-runner.ts            # Test execution and scaffolding
-    index.ts                  # Module exports
-.claude/
-  settings.json               # Hook configuration
-  hooks/
-    lgtm-validate.sh          # Post-edit validation hook
-    lgtm-precommit.sh         # Pre-commit gate hook
-  commands/
-    lgtm.md                   # /lgtm slash command
-hooks/
-  install.sh                  # One-line installer for other projects
-  uninstall.sh                # Removes hooks from a project
-```
-
-## Claude Code Integration
-
-LGTM provides first-class [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) for real-time skill validation — similar to how [skills.sh automated security audits](https://vercel.com/changelog/automated-security-audits-now-available-for-skills-sh) work at registry level, but running locally in your editor.
-
-### Quick Install
-
-```bash
-# In any project with SKILL.md files:
-curl -sSL https://raw.githubusercontent.com/dmgrok/LGTM_agent_skills/main/hooks/install.sh | bash
-```
-
-Or manually copy the hooks from the `hooks/` directory.
-
-### What It Does
-
-| Hook | Trigger | Behavior |
-|------|---------|----------|
-| **Post-edit validation** | After Claude writes/edits a SKILL.md | Shows score and issues inline |
-| **Pre-commit gate** | Before `git commit` with staged SKILL.md | Blocks commit if validation fails |
-| **`/lgtm` command** | On-demand | Full validation with score breakdown |
-
-### Manual Setup
-
-Add to your project's `.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/lgtm-validate.sh",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/lgtm-precommit.sh",
-            "timeout": 30
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-### Uninstall
-
-```bash
-bash hooks/uninstall.sh
+# Enable Lakera Guard:
+export LAKERA_GUARD_API_KEY=your-key
 ```
 
 ## Programmatic Usage
 
 ```typescript
-import { 
-  analyzeSkill, 
-  validateSkill, 
-  SkillAnalyzer,
-  checkDuplicatesAgainstRegistry,
-  listRegistrySkills 
-} from 'lgtm-agent-skills';
+import { scanProject, runRules, formatResults, ALL_RULES } from 'lgtm';
 
-// Quick validation
-const result = await validateSkill('./my-skill/SKILL.md');
-console.log(`Score: ${result.score}, Passed: ${result.passed}`);
+const files = await scanProject({ path: './my-project' });
+const result = await runRules({ files }, ALL_RULES);
+console.log(formatResults(result, files, 'cli'));
+```
 
-// Full analysis
-const analysis = await analyzeSkill('./my-skill/SKILL.md');
-console.log(analysis.score.kpis);
+## Architecture
 
-// Custom options (skip duplicate check for speed)
-const analyzer = new SkillAnalyzer({
-  scoring: { minGlobalScore: 80 },
-  skipDuplicateCheck: true,
-  format: 'json'
-});
-const result = await analyzer.analyze('./my-skill/SKILL.md');
-
-// Check duplicates directly
-const duplicates = await checkDuplicatesAgainstRegistry({
-  name: 'my-skill',
-  description: 'Does something cool'
-});
-console.log(duplicates.hasDuplicates, duplicates.matches);
-
-// List all skills from skills.sh
-const allSkills = await listRegistrySkills();
-console.log(`Registry has ${allSkills.length} skills`);
+```
+src/
+  cli.ts                    # CLI entry point (lgtm command)
+  action.ts                 # GitHub Action entry point
+  project-scanner.ts        # Auto-discovers .claude/ files
+  rule-engine.ts            # Runs rules, collects findings
+  reporter.ts              # Formats output (CLI, JSON, GitHub)
+  rules/
+    types.ts               # Rule interface, Finding, Severity
+    index.ts               # Rule registry
+    settings-lint.ts       # .claude/settings.json validation
+    hooks-lint.ts          # Hook script validation
+    commands-lint.ts       # Command file validation
+    skill-spec.ts          # Agent Skills spec compliance
+    skill-security.ts      # Security threat detection
+  scanners/
+    security-scanner.ts    # Cisco threat taxonomy + Lakera + gitleaks
+    spec-validator.ts      # Agent Skills specification rules
+    types.ts               # Scanner types
 ```
 
 ## License
