@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/on-edit.sh",
+            "timeout": 9999
+          }
+        ]
+      }
+    ],
+    "OnFileChange": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/missing-hook.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

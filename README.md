@@ -1,6 +1,8 @@
 # LGTM
 
-**Claude Code project health checks.** Validates your `.claude/` configuration, hooks, commands, and skills in one pass.
+You've set up Claude Code — added hooks, slash commands, maybe some agent skills. It works. But is it configured correctly? Are your hook scripts actually executable? Does your `settings.json` have valid event names? Are your SKILL.md files spec-compliant or subtly broken?
+
+LGTM answers these questions. It's a linter for your `.claude/` folder.
 
 ```bash
 npx lgtm
@@ -29,92 +31,84 @@ npx lgtm
   0 errors, 0 warnings  ✓
 ```
 
-## What It Checks
+## What it catches
 
 | Rule | What it validates |
 |------|-------------------|
-| **Settings lint** | `.claude/settings.json` — valid hook events, matcher syntax, hook types, timeouts, command existence |
-| **Hooks lint** | `.claude/hooks/*.sh` — executable permissions, stdin handling, dangerous patterns, hardcoded secrets |
-| **Commands lint** | `.claude/commands/*.md` — frontmatter, description field, prompt injection, file size |
-| **Skill spec** | `SKILL.md` files — [Agent Skills spec](https://agentskills.io/specification) compliance (name format, description, frontmatter) |
-| **Skill security** | `SKILL.md` files — prompt injection, code injection, data exfiltration, secrets ([Cisco AI Defense](https://github.com/cisco-ai-defense/skill-scanner) taxonomy) |
+| **Settings** | `settings.json` — valid hook events, matcher syntax, hook types, timeouts, command paths that actually exist |
+| **Hooks** | `*.sh` files — executable bit set, stdin handling, dangerous patterns, hardcoded secrets |
+| **Commands** | Slash command `.md` files — frontmatter present, description field, prompt injection, file size |
+| **Skill spec** | `SKILL.md` files — [Agent Skills spec](https://agentskills.io/specification) compliance (name format, required fields) |
+| **Skill security** | `SKILL.md` files — prompt injection, code injection, data exfiltration ([Cisco AI Defense](https://github.com/cisco-ai-defense/skill-scanner) taxonomy) |
 
 ## Install
 
 ```bash
-# Try it (zero install):
+# Run once without installing:
 npx lgtm
 
-# Add hooks to your project:
+# Set up hooks so it runs automatically on every edit and commit:
 npx lgtm init
 
-# Global install:
+# Install globally:
 npm install -g lgtm
 ```
 
-### `lgtm init`
+`lgtm init` adds two hooks to your project:
 
-Installs Claude Code hooks into your project:
+- **Post-edit** — validates SKILL.md immediately after Claude edits it
+- **Pre-commit gate** — blocks `git commit` if anything fails
+- **`/lgtm` command** — run checks on-demand from inside Claude Code
 
-- **Post-edit hook** — validates SKILL.md after every edit
-- **Pre-commit gate** — blocks `git commit` if skills fail validation
-- **`/lgtm` command** — on-demand health check from Claude Code
-
-## CLI Usage
+## CLI
 
 ```bash
-lgtm                              # Auto-discover and check everything
-lgtm check [path]                 # Check project health
-lgtm check --rule hooks           # Only run hooks rules
-lgtm check --rule settings        # Only run settings rules
-lgtm check --rule skills          # Only run skill rules
-lgtm check --format json          # Machine-readable output
-lgtm check --format github        # GitHub Actions annotations
-lgtm scan <path>                  # Security scan only
-lgtm init [path]                  # Install hooks into a project
-lgtm preset install <name>        # Install a preset
-lgtm preset remove <name>         # Remove an installed preset
-lgtm preset list                  # Show available/installed presets
+lgtm                          # Check everything in the current directory
+lgtm check [path]             # Check a specific path
+lgtm check --rule hooks       # Only run hooks rules
+lgtm check --rule settings    # Only run settings rules
+lgtm check --rule skills      # Only run skills rules
+lgtm check --format json      # Machine-readable output
+lgtm check --format github    # GitHub Actions annotations
+lgtm scan <path>              # Security scan only
+lgtm init [path]              # Install hooks into a project
 ```
 
 ## Presets
 
-Presets are shareable bundles of Claude Code configuration — hooks, permissions, model settings, commands, and CLAUDE.md snippets — installable in one command.
+Presets bundle Claude Code configuration — hooks, permissions, model settings, slash commands, CLAUDE.md guidelines — into a single installable unit.
 
 ```bash
-# Install the token optimizer preset:
-lgtm preset install token-optimizer
-
-# See what's available:
-lgtm preset list
-
-# Clean removal (no traces left):
-lgtm preset remove token-optimizer
+lgtm preset install token-optimizer   # Install a preset
+lgtm preset list                      # See what's available and what's installed
+lgtm preset remove token-optimizer    # Clean removal, no traces left
 ```
 
-### `token-optimizer`
+### Built-in: `token-optimizer`
 
-Reduces token consumption through:
+If your Claude Code sessions are burning tokens faster than expected, this preset helps. It combines several levers:
 
-| Lever | What it does |
-|-------|-------------|
-| Model strategy | Sets `opusplan` (Opus plans, Sonnet executes) |
-| Permission allowlist | Pre-approves common read-only commands to reduce roundtrips |
-| Context injection | PreToolUse hook nudges toward targeted file reads and focused subagents |
-| Usage monitoring | PostToolUse hook warns on wastefully large file reads |
-| CLAUDE.md guidelines | Token-efficiency rules Claude follows automatically |
-| `/token-status` command | Session diagnostics for optimization status |
+- Sets `opusplan` mode (Opus reasons about what to do, Sonnet executes — cheaper without sacrificing quality)
+- Pre-approves common read-only commands so Claude doesn't ask permission for `git log` or `grep`
+- Injects a PreToolUse hook that nudges Claude toward targeted reads instead of reading whole files
+- Adds a PostToolUse hook that warns when a file read was wastefully large
+- Appends token-efficiency guidelines to your CLAUDE.md
+- Installs a `/token-status` command for session diagnostics
 
-### Creating Custom Presets
+```bash
+lgtm preset install token-optimizer
+```
 
-A preset is a directory with a `preset.json` manifest:
+### Creating your own preset
+
+A preset is a folder with a `preset.json` manifest. Everything is optional except the name.
 
 ```
 my-preset/
-  preset.json       # Required: manifest
-  hooks/            # Shell scripts to install
-  commands/         # Slash command .md files
-  snippets/         # CLAUDE.md fragments to append
+  preset.json         # Manifest
+  hooks/              # Shell scripts → installed to .claude/hooks/
+  commands/           # Slash command .md files → installed to .claude/commands/
+  snippets/           # Text → appended to .claude/CLAUDE.md
 ```
 
 ```json
@@ -136,20 +130,19 @@ my-preset/
 }
 ```
 
-Presets compose additively — install multiple without conflicts. A lock file (`.claude/presets.lock.json`) tracks what was installed for clean removal.
+Multiple presets compose additively. A lock file (`.claude/presets.lock.json`) tracks what was installed so removal is clean.
 
 ```bash
-# Install from a local directory:
-lgtm preset install ./my-preset
-
-# Force reinstall:
-lgtm preset install token-optimizer --force
+lgtm preset install ./my-preset          # Install from a local directory
+lgtm preset install token-optimizer --force   # Reinstall over an existing one
 ```
 
 ## GitHub Action
 
+Run checks on every push or PR:
+
 ```yaml
-name: LGTM Health Check
+name: LGTM
 on: [push, pull_request]
 
 jobs:
@@ -163,39 +156,26 @@ jobs:
           fail-on-error: true
 ```
 
-### Inputs
+| Input | Default | Description |
+|-------|---------|-------------|
+| `path` | `.` | Path to check |
+| `fail-on-error` | `true` | Fail the action on errors |
+| `lakera-api-key` | `''` | Lakera Guard API key for ML-based prompt injection detection |
 
-| Input | Description | Default |
-|-------|-------------|---------|
-| `path` | Path to check | `.` |
-| `fail-on-error` | Fail the action on errors | `true` |
-| `lakera-api-key` | Lakera Guard API key for prompt injection detection | `''` |
+## Security scanner
 
-### Outputs
+The skill security scanner uses the [Cisco AI Defense threat taxonomy](https://github.com/cisco-ai-defense/skill-scanner). Optionally layer in:
 
-| Output | Description |
-|--------|-------------|
-| `passed` | Whether all checks passed (true/false) |
-| `score` | 100 if passed, 0 if failed (backwards compat) |
-| `results-file` | Path to JSON results file |
-
-## Security Scanner
-
-The security scanner uses the [Cisco AI Defense threat taxonomy](https://github.com/cisco-ai-defense/skill-scanner) with optional professional detection:
-
-- **Pattern-based detection** — prompt injection, code injection, data exfiltration, tool abuse, privilege escalation
-- **[Lakera Guard](https://lakera.ai)** — ML-based prompt injection detection (optional, free tier available)
-- **[gitleaks](https://github.com/gitleaks/gitleaks) / [trufflehog](https://github.com/trufflesecurity/trufflehog)** — Secret detection (uses external tools when available)
+- **[Lakera Guard](https://lakera.ai)** — ML-based prompt injection detection (free tier available)
+- **[gitleaks](https://github.com/gitleaks/gitleaks)** — secret detection
 
 ```bash
-# Install secret detection tools (recommended):
 brew install gitleaks
-
-# Enable Lakera Guard:
 export LAKERA_GUARD_API_KEY=your-key
+npx lgtm scan ./skills
 ```
 
-## Programmatic Usage
+## Programmatic use
 
 ```typescript
 import { scanProject, runRules, formatResults, ALL_RULES } from 'lgtm';
@@ -203,38 +183,6 @@ import { scanProject, runRules, formatResults, ALL_RULES } from 'lgtm';
 const files = await scanProject({ path: './my-project' });
 const result = await runRules({ files }, ALL_RULES);
 console.log(formatResults(result, files, 'cli'));
-```
-
-## Architecture
-
-```
-src/
-  cli.ts                    # CLI entry point (lgtm command)
-  action.ts                 # GitHub Action entry point
-  project-scanner.ts        # Auto-discovers .claude/ files
-  rule-engine.ts            # Runs rules, collects findings
-  reporter.ts              # Formats output (CLI, JSON, GitHub)
-  rules/
-    types.ts               # Rule interface, Finding, Severity
-    index.ts               # Rule registry
-    settings-lint.ts       # .claude/settings.json validation
-    hooks-lint.ts          # Hook script validation
-    commands-lint.ts       # Command file validation
-    skill-spec.ts          # Agent Skills spec compliance
-    skill-security.ts      # Security threat detection
-  presets/
-    types.ts               # PresetManifest, PresetsLock interfaces
-    installer.ts           # Install preset into project
-    uninstaller.ts         # Clean removal via lock file
-    composer.ts            # Settings merge engine
-    resolver.ts            # Resolve preset name to directory
-    index.ts               # Public API
-  scanners/
-    security-scanner.ts    # Cisco threat taxonomy + Lakera + gitleaks
-    spec-validator.ts      # Agent Skills specification rules
-    types.ts               # Scanner types
-presets/
-  token-optimizer/          # Built-in preset: token consumption optimizer
 ```
 
 ## License
