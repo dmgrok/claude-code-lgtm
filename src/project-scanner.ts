@@ -105,6 +105,11 @@ export async function scanProject(options?: ScanOptions): Promise<DiscoveredFile
     result.mcpConfig = mcpConfigPath;
   }
 
+  const presetsLockPath = path.join(claudeDir, 'presets.lock.json');
+  if (await exists(presetsLockPath)) {
+    result.presetsLock = presetsLockPath;
+  }
+
   const allFiles = await walkDirectory(projectRoot, 3, new Set(['node_modules', '.git', 'dist']));
   result.skillFiles = allFiles.filter(f => path.basename(f) === 'SKILL.md');
 

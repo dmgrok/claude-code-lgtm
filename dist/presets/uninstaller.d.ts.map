@@ -1,0 +1,1 @@
+{"version":3,"file":"uninstaller.d.ts","sourceRoot":"","sources":["../../src/presets/uninstaller.ts"],"names":[],"mappings":"AAKA,MAAM,WAAW,eAAe;IAC9B,OAAO,EAAE,OAAO,CAAC;IACjB,UAAU,EAAE,MAAM,CAAC;IACnB,YAAY,EAAE,MAAM,EAAE,CAAC;CACxB;AAED,wBAAsB,eAAe,CACnC,UAAU,EAAE,MAAM,EAClB,WAAW,EAAE,MAAM,GAClB,OAAO,CAAC,eAAe,CAAC,CAyE1B"}

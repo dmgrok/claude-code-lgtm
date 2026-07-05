@@ -4,4 +4,5 @@ export { formatResults } from './reporter.js';
 export { ALL_RULES } from './rules/index.js';
 export { SecurityScanner } from './scanners/index.js';
 export { SpecValidator } from './scanners/index.js';
+export { installPreset, uninstallPreset, listAvailable, resolvePreset } from './presets/index.js';
 //# sourceMappingURL=index.js.map

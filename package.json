@@ -8,6 +8,10 @@
   "bin": {
     "lgtm": "./dist/cli.js"
   },
+  "files": [
+    "dist/",
+    "presets/"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.ts",

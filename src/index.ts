@@ -9,3 +9,6 @@ export type { ScanOptions } from './project-scanner.js';
 
 export { SecurityScanner } from './scanners/index.js';
 export { SpecValidator } from './scanners/index.js';
+
+export { installPreset, uninstallPreset, listAvailable, resolvePreset } from './presets/index.js';
+export type { PresetManifest, PresetsLock, InstalledPreset } from './presets/index.js';

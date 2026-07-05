@@ -6,6 +6,7 @@ import { scanProject } from './project-scanner.js';
 import { runRules } from './rule-engine.js';
 import { formatResults } from './reporter.js';
 import { ALL_RULES } from './rules/index.js';
+import { installPreset, uninstallPreset, listAvailable } from './presets/index.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 function parseArgs(argv) {
@@ -15,6 +16,7 @@ function parseArgs(argv) {
         format: 'cli',
         help: false,
         version: false,
+        force: false,
     };
     let i = 0;
     while (i < args.length) {
@@ -24,6 +26,9 @@ function parseArgs(argv) {
         }
         else if (arg === '--version' || arg === '-V') {
             result.version = true;
+        }
+        else if (arg === '--force') {
+            result.force = true;
         }
         else if (arg === '--format' || arg === '-f') {
             result.format = args[++i];
@@ -36,12 +41,18 @@ function parseArgs(argv) {
         }
         else if (!arg.startsWith('-')) {
             if (!result.command || result.command === 'check') {
-                if (['check', 'scan', 'init'].includes(arg)) {
+                if (['check', 'scan', 'init', 'preset'].includes(arg)) {
                     result.command = arg;
+                }
+                else if (result.command === 'preset' && !result.subcommand) {
+                    result.subcommand = arg;
                 }
                 else if (!result.path) {
                     result.path = arg;
                 }
+            }
+            else if (result.command === 'preset' && !result.subcommand) {
+                result.subcommand = arg;
             }
             else if (!result.path) {
                 result.path = arg;
@@ -56,18 +67,22 @@ function printHelp() {
 lgtm - Claude Code project health tool
 
 USAGE:
-  lgtm                        Auto-discover and check everything
-  lgtm check [path]           Check project health (default command)
-  lgtm check --rule <filter>  Only run matching rules
-  lgtm check --format <fmt>   Output: cli (default), json, github
-  lgtm check --severity <s>   Minimum severity: error, warning, info
-  lgtm scan <path>            Security scan only (skill-security rules)
-  lgtm init                   Install hooks + /lgtm command into project
+  lgtm                              Auto-discover and check everything
+  lgtm check [path]                 Check project health (default command)
+  lgtm check --rule <filter>        Only run matching rules
+  lgtm check --format <fmt>         Output: cli (default), json, github
+  lgtm check --severity <s>         Minimum severity: error, warning, info
+  lgtm scan <path>                  Security scan only (skill-security rules)
+  lgtm init                         Install hooks + /lgtm command into project
+  lgtm preset install <name>        Install a preset (e.g. token-optimizer)
+  lgtm preset remove <name>         Remove an installed preset
+  lgtm preset list                  Show available and installed presets
 
 OPTIONS:
   -f, --format <fmt>     Output format: cli, json, github
   -r, --rule <filter>    Only run rules matching this filter
   -s, --severity <sev>   Minimum severity level
+  --force                Force reinstall of an existing preset
   -h, --help             Show this help message
   -V, --version          Show version
 `);
@@ -184,13 +199,25 @@ async function initCommand(targetPath) {
             PostToolUse: [
                 {
                     matcher: 'Edit|Write',
-                    command: `.claude/hooks/lgtm-validate.sh`,
+                    hooks: [
+                        {
+                            type: 'command',
+                            command: `.claude/hooks/lgtm-validate.sh`,
+                            timeout: 30,
+                        },
+                    ],
                 },
             ],
             PreToolUse: [
                 {
                     matcher: 'Bash',
-                    command: `.claude/hooks/lgtm-precommit.sh`,
+                    hooks: [
+                        {
+                            type: 'command',
+                            command: `.claude/hooks/lgtm-precommit.sh`,
+                            timeout: 30,
+                        },
+                    ],
                 },
             ],
         },
@@ -206,11 +233,11 @@ async function initCommand(targetPath) {
         if (!existing.hooks.PreToolUse) {
             existing.hooks.PreToolUse = [];
         }
-        const hasValidate = existing.hooks.PostToolUse.some((h) => h.command?.includes('lgtm-validate'));
+        const hasValidate = existing.hooks.PostToolUse.some((h) => h.hooks?.some(hook => hook.command?.includes('lgtm-validate')));
         if (!hasValidate) {
             existing.hooks.PostToolUse.push(hookConfig.hooks.PostToolUse[0]);
         }
-        const hasPrecommit = existing.hooks.PreToolUse.some((h) => h.command?.includes('lgtm-precommit'));
+        const hasPrecommit = existing.hooks.PreToolUse.some((h) => h.hooks?.some(hook => hook.command?.includes('lgtm-precommit')));
         if (!hasPrecommit) {
             existing.hooks.PreToolUse.push(hookConfig.hooks.PreToolUse[0]);
         }
@@ -236,6 +263,90 @@ Use /lgtm in Claude Code to run checks manually.
 `);
     return 0;
 }
+async function presetCommand(args) {
+    const projectRoot = process.cwd();
+    switch (args.subcommand) {
+        case 'install': {
+            const presetName = args.path;
+            if (!presetName) {
+                console.error('Error: preset install requires a preset name');
+                console.error('Usage: lgtm preset install <name>');
+                console.error('Example: lgtm preset install token-optimizer');
+                return 2;
+            }
+            try {
+                const result = await installPreset(presetName, projectRoot, { force: args.force });
+                console.log(`\nPreset "${result.presetName}" installed successfully!\n`);
+                if (result.filesCreated.length > 0) {
+                    console.log('Files created:');
+                    for (const f of result.filesCreated) {
+                        console.log(`  ${path.relative(projectRoot, f)}`);
+                    }
+                }
+                if (result.warnings.length > 0) {
+                    console.log('\nWarnings:');
+                    for (const w of result.warnings) {
+                        console.log(`  ${w}`);
+                    }
+                }
+                console.log('\nRun `lgtm check` to validate the configuration.');
+            }
+            catch (err) {
+                console.error(`Error: ${err.message}`);
+                return 1;
+            }
+            return 0;
+        }
+        case 'remove': {
+            const presetName = args.path;
+            if (!presetName) {
+                console.error('Error: preset remove requires a preset name');
+                console.error('Usage: lgtm preset remove <name>');
+                return 2;
+            }
+            try {
+                const result = await uninstallPreset(presetName, projectRoot);
+                console.log(`\nPreset "${result.presetName}" removed successfully!\n`);
+                if (result.filesRemoved.length > 0) {
+                    console.log('Removed:');
+                    for (const f of result.filesRemoved) {
+                        console.log(`  ${path.relative(projectRoot, f)}`);
+                    }
+                }
+            }
+            catch (err) {
+                console.error(`Error: ${err.message}`);
+                return 1;
+            }
+            return 0;
+        }
+        case 'list': {
+            const available = await listAvailable();
+            const lockPath = path.join(projectRoot, '.claude', 'presets.lock.json');
+            let installed = {};
+            try {
+                const lock = JSON.parse(await fs.readFileSync(lockPath, 'utf-8'));
+                installed = lock.installed ?? {};
+            }
+            catch { /* no lock file */ }
+            console.log('\nAvailable presets:');
+            if (available.length === 0) {
+                console.log('  (none found)');
+            }
+            else {
+                for (const name of available) {
+                    const status = installed[name] ? ' [installed]' : '';
+                    console.log(`  ${name}${status}`);
+                }
+            }
+            console.log('');
+            return 0;
+        }
+        default:
+            console.error('Usage: lgtm preset <install|remove|list> [name]');
+            return 2;
+    }
+}
 async function main() {
     const args = parseArgs(process.argv);
     if (args.version) {
@@ -256,6 +367,9 @@ async function main() {
             break;
         case 'init':
             exitCode = await initCommand(args.path);
+            break;
+        case 'preset':
+            exitCode = await presetCommand(args);
             break;
         default:
             console.error(`Unknown command: ${args.command}`);

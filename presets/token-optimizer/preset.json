@@ -1,0 +1,56 @@
+{
+  "name": "token-optimizer",
+  "version": "1.0.0",
+  "description": "Reduces Claude Code token consumption via model strategy, context injection, and permission optimization",
+  "tags": ["cost", "optimization", "tokens"],
+  "settings": {
+    "model": "opusplan"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(npm test *)",
+      "Bash(npm run *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/token-optimizer-concise.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/token-optimizer-monitor.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "commands": ["token-status.md"],
+  "snippets": ["token-guidelines.md"],
+  "conflicts": ["quality-maximum"]
+}

@@ -15,6 +15,7 @@ export interface DiscoveredFiles {
     hookScripts: string[];
     commandFiles: string[];
     mcpConfig?: string;
+    presetsLock?: string;
     skillFiles: string[];
 }
 export interface RuleContext {
