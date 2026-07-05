@@ -7,6 +7,7 @@ import { runRules } from './rule-engine.js';
 import { formatResults } from './reporter.js';
 import { ALL_RULES } from './rules/index.js';
 import { installPreset, uninstallPreset, listAvailable } from './presets/index.js';
+import { compareCommand } from './compare/index.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 function parseArgs(argv) {
@@ -30,6 +31,12 @@ function parseArgs(argv) {
         else if (arg === '--force') {
             result.force = true;
         }
+        else if (arg === '--session') {
+            result.session = args[++i];
+        }
+        else if (arg === '--prompt') {
+            result.prompt = args[++i];
+        }
         else if (arg === '--format' || arg === '-f') {
             result.format = args[++i];
         }
@@ -41,7 +48,7 @@ function parseArgs(argv) {
         }
         else if (!arg.startsWith('-')) {
             if (!result.command || result.command === 'check') {
-                if (['check', 'scan', 'init', 'preset'].includes(arg)) {
+                if (['check', 'scan', 'init', 'preset', 'compare'].includes(arg)) {
                     result.command = arg;
                 }
                 else if (result.command === 'preset' && !result.subcommand) {
@@ -77,6 +84,9 @@ USAGE:
   lgtm preset install <name>        Install a preset (e.g. token-optimizer)
   lgtm preset remove <name>         Remove an installed preset
   lgtm preset list                  Show available and installed presets
+  lgtm compare                      Run baseline vs optimized token comparison
+  lgtm compare --session <uuid>     Analyze a past session's token efficiency
+  lgtm compare --prompt "..."       Custom prompt for live comparison
 
 OPTIONS:
   -f, --format <fmt>     Output format: cli, json, github
@@ -370,6 +380,13 @@ async function main() {
             break;
         case 'preset':
             exitCode = await presetCommand(args);
+            break;
+        case 'compare':
+            exitCode = await compareCommand({
+                session: args.session,
+                prompt: args.prompt,
+                projectPath: args.path,
+            });
             break;
         default:
             console.error(`Unknown command: ${args.command}`);

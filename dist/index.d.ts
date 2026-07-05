@@ -10,4 +10,9 @@ export { SecurityScanner } from './scanners/index.js';
 export { SpecValidator } from './scanners/index.js';
 export { installPreset, uninstallPreset, listAvailable, resolvePreset } from './presets/index.js';
 export type { PresetManifest, PresetsLock, InstalledPreset } from './presets/index.js';
+export { compareCommand } from './compare/index.js';
+export { calculateCost, cacheHitRate, MODEL_PRICING } from './compare/pricing.js';
+export { parseSession } from './compare/session-parser.js';
+export { estimateSavings } from './compare/estimator.js';
+export type { TokenUsage, SessionMetrics, CompareResult, EstimatedCompareResult, CompareOptions } from './compare/types.js';
 //# sourceMappingURL=index.d.ts.map
