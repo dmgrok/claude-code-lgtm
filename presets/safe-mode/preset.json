@@ -1,0 +1,57 @@
+{
+  "name": "safe-mode",
+  "version": "1.0.0",
+  "description": "Comprehensive guardrails: blocks destructive commands, sensitive file access, and runaway agent spawning",
+  "tags": ["safety", "security", "guardrails"],
+  "config": {
+    "agent_limit": {
+      "type": "number",
+      "default": 5,
+      "description": "Maximum agent spawns per session before blocking"
+    },
+    "allow_force_push": {
+      "type": "boolean",
+      "default": false,
+      "description": "Allow git push --force (blocked by default)"
+    },
+    "allow_env_read": {
+      "type": "boolean",
+      "default": false,
+      "description": "Allow reading .env files (blocked by default)"
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/safe-mode-bash.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/safe-mode-files.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/safe-mode-agent.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
