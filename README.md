@@ -1,30 +1,66 @@
-# cc-tricks
+# cc-tricks — Claude Code Tricks Cookbook
 
-Make Claude Code cheaper and faster with one command.
+A CLI toolkit and preset registry for making Claude Code cheaper, faster, and safer. Install battle-tested configurations in one command, or publish your own.
 
 ```bash
 npm install -g github:dmgrok/claude-code-tricks-cookbook
 cc-tricks preset install token-optimizer
 ```
 
-That's it. Your next Claude Code session uses ~30% fewer tokens and costs ~30% less. No config files to hand-edit, no docs to read.
+## Built-in presets
 
-## What it installs
-
-The `token-optimizer` preset writes a complete `.claude/` configuration that:
-
-- **Switches to `opusplan`** — Opus plans the approach, Sonnet executes. 32% cheaper per token than pure Opus, same quality.
-- **Pre-approves 14 common tools** — `git *`, `grep *`, `find *`, `npm test *`, etc. Eliminates permission roundtrip tokens (each one costs ~500 tokens of back-and-forth).
-- **Adds a PreToolUse hook** — nudges Claude toward targeted line-range reads instead of reading entire files.
-- **Adds a PostToolUse hook** — warns when a tool response exceeds 50K chars, preventing context bloat.
-- **Appends CLAUDE.md guidelines** — behavioral rules like "grep before read", "batch tool calls", "don't re-read after writes".
-- **Installs `/token-status`** — a slash command to check your optimization config is active.
-
-Everything is reversible:
+### `token-optimizer` — reduce token usage by ~30%
 
 ```bash
-cc-tricks preset remove token-optimizer   # clean undo via lock file
+cc-tricks preset install token-optimizer
 ```
+
+Writes a complete `.claude/` configuration:
+
+| What | Effect |
+|------|--------|
+| `model: opusplan` | Opus plans, Sonnet executes — 32% cheaper than pure Opus |
+| 14 pre-approved tools | Eliminates permission roundtrip tokens (`git *`, `grep *`, `find *`, etc.) |
+| PreToolUse hook | Nudges Claude toward targeted line-range reads |
+| PostToolUse hook | Warns when tool output exceeds 50K chars |
+| Auto-compact nudge | Injects `/compact` reminder at 70% context capacity |
+| CLAUDE.md snippet | Behavioral rules: grep before read, batch calls, no re-reads |
+| `/token-status` command | Check optimization config is active |
+
+### `budget-guard` — hard cost limit per session
+
+```bash
+cc-tricks preset install budget-guard --set budget=20
+```
+
+Fires a PreToolUse hook before every tool call. Warns at 80%, blocks at 100%. Model-aware pricing (opus, opusplan, sonnet). Incremental JSONL parsing — <50ms per call after warmup.
+
+```bash
+cc-tricks preset install budget-guard                    # default $10
+cc-tricks preset install budget-guard --set budget=50    # custom limit
+cc-tricks preset install budget-guard --set warn_at=0.7  # warn at 70%
+```
+
+### `safe-mode` — guardrails against destructive operations
+
+```bash
+cc-tricks preset install safe-mode
+```
+
+Three hooks covering:
+- **Bash**: blocks `rm -rf /`, `git push --force`, `curl | bash`, fork bombs; warns on `sudo`
+- **Files**: blocks reads of `.env`, SSH keys, AWS credentials; blocks writes to `/etc`, system dirs
+- **Agents**: rate-limits agent spawning (default 5/session) to prevent runaway loops
+
+```bash
+cc-tricks preset install safe-mode --set agent_limit=10
+cc-tricks preset install safe-mode --set allow_force_push=true
+cc-tricks preset install safe-mode --set allow_env_read=true
+```
+
+All presets stack cleanly — no conflicts. Remove any with `cc-tricks preset remove <name>`.
+
+---
 
 ## Prove it works
 
@@ -32,7 +68,7 @@ cc-tricks preset remove token-optimizer   # clean undo via lock file
 cc-tricks compare
 ```
 
-Runs the same task twice — once with bare Claude Code (`--safe-mode`), once with your config — and prints the difference:
+Runs the same benchmark prompt twice — once without config (`--safe-mode`), once with — and prints the diff:
 
 ```
                       Baseline        Optimized       Delta
@@ -45,34 +81,43 @@ Runs the same task twice — once with bare Claude Code (`--safe-mode`), once wi
   ────────────────────────────────────────────────────────────────
 ```
 
-Or analyze a past session without re-running anything:
+Or analyze a past session without re-running:
 
 ```bash
 cc-tricks compare --session <uuid>
 ```
 
+---
+
+## Community presets
+
+Install any GitHub repo that contains a `preset.json`:
+
+```bash
+cc-tricks preset install github:user/their-recipe
+cc-tricks preset install github:corp/monorepo/presets/fast-mode   # subpath
+cc-tricks preset install github:user/recipe#v2                    # specific ref
+```
+
+Downloads, caches at `~/.cc-tricks/cache/`, installs like a built-in. To publish: create a repo with `preset.json` at root and share the install command.
+
+---
+
 ## Install
 
 ```bash
 npm install -g github:dmgrok/claude-code-tricks-cookbook
+# or run once:
+npx github:dmgrok/claude-code-tricks-cookbook
 ```
 
-Requires Node >= 18. Optional: `jq` (for preset hooks).
-
-## Quick start
-
-```bash
-cc-tricks preset install token-optimizer              # optimize Claude Code
-cc-tricks preset install github:user/my-preset        # install from GitHub
-cc-tricks compare                                     # measure the difference
-cc-tricks                                             # lint your .claude/ config
-```
+Requires Node >= 18. Optional: `jq` (required by preset hooks).
 
 ---
 
 ## Linting
 
-Beyond optimization, `cc-tricks` validates your entire `.claude/` folder — catching misconfigurations before they silently break your setup.
+`cc-tricks` also validates your `.claude/` folder — catching misconfigurations before they silently break things.
 
 ```bash
 cc-tricks
@@ -87,11 +132,11 @@ cc-tricks
     ✓ Hook events are valid
 
   .claude/hooks/
+    ✓ cct-validate.sh is executable
     ✓ token-optimizer-concise.sh is executable
-    ✓ token-optimizer-monitor.sh is executable
 
   .claude/commands/
-    ✓ token-status.md has description frontmatter
+    ✓ cc-tricks.md has description frontmatter
 
   ──────────────────────────────────────────────────
   0 errors, 0 warnings  ✓
@@ -108,13 +153,13 @@ cc-tricks
 ## CLI reference
 
 ```bash
-cc-tricks                              # Check everything
+cc-tricks                              # Lint everything in the current directory
 cc-tricks check [path]                 # Check a specific path
 cc-tricks check --rule hooks           # Only run hooks rules
 cc-tricks check --format json          # Machine-readable output
 cc-tricks check --format github        # GitHub Actions annotations
 cc-tricks scan <path>                  # Security scan only
-cc-tricks init                         # Install validation hooks into project
+cc-tricks init                         # Install cc-tricks hooks into project
 cc-tricks preset install <name>                    # Install a built-in preset
 cc-tricks preset install <name> --set key=value    # Install with config
 cc-tricks preset install github:user/repo          # Install from GitHub
@@ -122,9 +167,9 @@ cc-tricks preset install github:user/repo#v2       # Specific ref
 cc-tricks preset install github:user/repo/subpath  # Subpath in monorepo
 cc-tricks preset remove <name>                     # Remove a preset (clean undo)
 cc-tricks preset list                              # Show available presets
-cc-tricks compare                      # Benchmark baseline vs optimized
-cc-tricks compare --session <uuid>     # Analyze a past session
-cc-tricks compare --prompt "..."       # Custom benchmark prompt
+cc-tricks compare                                  # Benchmark baseline vs optimized
+cc-tricks compare --session <uuid>                 # Analyze a past session
+cc-tricks compare --prompt "..."                   # Custom benchmark prompt
 ```
 
 ## How it works
@@ -141,7 +186,7 @@ cc-tricks compare --prompt "..."       # Custom benchmark prompt
 ## GitHub Action
 
 ```yaml
-name: CC-Tricks
+name: cc-tricks
 on: [push, pull_request]
 
 jobs:
@@ -157,7 +202,7 @@ jobs:
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `path` | `.` | Path to SKILL.md file or directory containing skills |
+| `path` | `.` | Path to SKILL.md file or directory |
 | `min-score` | `70` | Minimum score to pass (0–100) |
 | `fail-on-error` | `true` | Fail the action if validation fails |
 | `skip-duplicates` | `false` | Skip duplicate check against public registries |
