@@ -220,7 +220,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dmgrok/LGTM_agent_skills@v2
+      - uses: dmgrok/claude-code-lgtm@v2
         with:
           path: '.'
           fail-on-error: true
