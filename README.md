@@ -2,36 +2,6 @@
 
 Claude Code's `.claude/` folder has no validation. You can ship a `settings.json` with a misspelled hook event name, a hook script that isn't executable, or a slash command missing its frontmatter — and nothing will tell you until something silently misbehaves.
 
-This is a linter for `.claude/`. It also ships a preset system for installing validated Claude Code configurations.
-
-```bash
-npm install -g github:dmgrok/LGTM_agent_skills
-lgtm
-```
-
-```
-  LGTM — Claude Code Project Health
-  ──────────────────────────────────────────────────
-
-  .claude/settings.json
-    ✓ Valid schema
-    ✓ Hook events are valid
-
-  .claude/hooks/
-    ✓ lgtm-validate.sh is executable
-    ✓ lgtm-precommit.sh is executable
-
-  .claude/commands/
-    ✓ lgtm.md has description frontmatter
-
-  skills/my-skill/SKILL.md
-    ✓ Spec compliant
-    ✓ Security: clean
-
-  ──────────────────────────────────────────────────
-  0 errors, 0 warnings  ✓
-```
-
 ## How it works
 
 ```
