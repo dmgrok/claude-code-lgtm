@@ -62,9 +62,10 @@ Requires Node >= 18. Optional: `jq` (for preset hooks).
 ## Quick start
 
 ```bash
-lgtm preset install token-optimizer   # optimize Claude Code
-lgtm compare                          # measure the difference
-lgtm                                  # lint your .claude/ config
+lgtm preset install token-optimizer              # optimize Claude Code
+lgtm preset install github:user/my-preset        # install from GitHub
+lgtm compare                                     # measure the difference
+lgtm                                             # lint your .claude/ config
 ```
 
 ---
@@ -114,9 +115,13 @@ lgtm check --format json          # Machine-readable output
 lgtm check --format github        # GitHub Actions annotations
 lgtm scan <path>                  # Security scan only
 lgtm init                         # Install validation hooks into project
-lgtm preset install <name>        # Install a preset
-lgtm preset remove <name>         # Remove a preset (clean undo)
-lgtm preset list                  # Show available presets
+lgtm preset install <name>                    # Install a built-in preset
+lgtm preset install <name> --set key=value    # Install with config
+lgtm preset install github:user/repo          # Install from GitHub
+lgtm preset install github:user/repo#v2       # Specific ref
+lgtm preset install github:user/repo/subpath  # Subpath in monorepo
+lgtm preset remove <name>                     # Remove a preset (clean undo)
+lgtm preset list                              # Show available presets
 lgtm compare                      # Benchmark baseline vs optimized
 lgtm compare --session <uuid>     # Analyze a past session
 lgtm compare --prompt "..."       # Custom benchmark prompt

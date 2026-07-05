@@ -3,7 +3,7 @@ import * as path from 'path';
 import { mergeSettingsJson } from './composer.js';
 import { resolvePreset } from './resolver.js';
 export async function installPreset(nameOrPath, projectRoot, options) {
-    const { manifest, baseDir } = await resolvePreset(nameOrPath);
+    const { manifest, baseDir } = await resolvePreset(nameOrPath, { force: options?.force });
     const claudeDir = path.join(projectRoot, '.claude');
     const lock = await readLock(claudeDir);
     const warnings = [];

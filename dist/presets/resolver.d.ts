@@ -1,5 +1,7 @@
 import type { PresetManifest } from './types.js';
-export declare function resolvePreset(nameOrPath: string): Promise<{
+export declare function resolvePreset(nameOrPath: string, options?: {
+    force?: boolean;
+}): Promise<{
     manifest: PresetManifest;
     baseDir: string;
 }>;

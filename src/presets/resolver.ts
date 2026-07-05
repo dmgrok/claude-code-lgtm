@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import type { PresetManifest } from './types.js';
+import { parseRemoteSpec, fetchPreset } from './registry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,7 +13,7 @@ function getBuiltinPresetsDir(): string {
   return fromDist;
 }
 
-export async function resolvePreset(nameOrPath: string): Promise<{
+export async function resolvePreset(nameOrPath: string, options?: { force?: boolean }): Promise<{
   manifest: PresetManifest;
   baseDir: string;
 }> {
@@ -21,6 +22,14 @@ export async function resolvePreset(nameOrPath: string): Promise<{
     const absPath = path.resolve(nameOrPath);
     const manifest = await readManifest(absPath);
     return { manifest, baseDir: absPath };
+  }
+
+  // Remote: github:owner/repo[/subpath][#ref]
+  if (nameOrPath.startsWith('github:')) {
+    const spec = parseRemoteSpec(nameOrPath);
+    const cachedDir = await fetchPreset(spec, options?.force ?? false);
+    const manifest = await readManifest(cachedDir);
+    return { manifest, baseDir: cachedDir };
   }
 
   // Built-in preset

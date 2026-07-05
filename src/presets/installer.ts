@@ -16,7 +16,7 @@ export async function installPreset(
   projectRoot: string,
   options?: { force?: boolean; config?: Record<string, string | number | boolean> }
 ): Promise<InstallResult> {
-  const { manifest, baseDir } = await resolvePreset(nameOrPath);
+  const { manifest, baseDir } = await resolvePreset(nameOrPath, { force: options?.force });
   const claudeDir = path.join(projectRoot, '.claude');
   const lock = await readLock(claudeDir);
   const warnings: string[] = [];
