@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint and test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+  dist:
+    name: Committed dist/ matches build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Fail if dist/ is out of date
+        run: |
+          if [ -n "$(git status --porcelain -- dist)" ]; then
+            echo "::error::dist/ is out of date. Run 'npm run build' and commit the result."
+            git status --porcelain -- dist
+            exit 1
+          fi
+
+  action:
+    name: Action smoke test (no npm install)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Healthy fixture
+        id: healthy
+        uses: ./
+        with:
+          path: tests/fixtures/healthy-project
+      - name: Broken fixture
+        id: broken
+        continue-on-error: true
+        uses: ./
+        with:
+          path: tests/fixtures/broken-project
+      - name: Assert outputs
+        env:
+          HEALTHY_PASSED: ${{ steps.healthy.outputs.passed }}
+          BROKEN_PASSED: ${{ steps.broken.outputs.passed }}
+          BROKEN_OUTCOME: ${{ steps.broken.outcome }}
+        run: |
+          test "$HEALTHY_PASSED" = "true"
+          test "$BROKEN_PASSED" = "false"
+          test "$BROKEN_OUTCOME" = "failure"
