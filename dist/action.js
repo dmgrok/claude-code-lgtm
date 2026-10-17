@@ -9,16 +9,15 @@ import * as core from '@actions/core';
 import { scanProject } from './project-scanner.js';
 import { runRules } from './rule-engine.js';
 import { formatResults } from './reporter.js';
-import { ALL_RULES } from './rules/index.js';
+import { createActionRules, summarizeFindings } from './action-support.js';
 async function run() {
     try {
         // Read inputs
         const inputPath = core.getInput('path') || '.';
         const failOnError = core.getInput('fail-on-error') !== 'false';
         const lakeraApiKey = core.getInput('lakera-api-key') || process.env.LAKERA_GUARD_API_KEY;
-        // Set Lakera API key env var if provided
         if (lakeraApiKey) {
-            process.env.LAKERA_GUARD_API_KEY = lakeraApiKey;
+            core.setSecret(lakeraApiKey);
             core.info('Lakera Guard: enabled');
         }
         core.info(`Scanning project at: ${inputPath}`);
@@ -26,20 +25,19 @@ async function run() {
         const files = await scanProject({ path: inputPath });
         core.info(`Project root: ${files.projectRoot}`);
         // Run all rules
-        const result = await runRules({ files }, ALL_RULES);
-        core.info(`Rules executed: ${ALL_RULES.length}`);
+        const rules = createActionRules({ lakeraApiKey });
+        const result = await runRules({ files }, rules);
+        core.info(`Rules executed: ${rules.length}`);
         core.info(`Findings: ${result.errors} errors, ${result.warnings} warnings, ${result.infos} info`);
         // Format and log results
         const output = formatResults(result, files, 'github');
         core.info(output);
-        // Count findings by category
-        const specCount = result.findings.filter((f) => f.ruleId.startsWith('skill-spec')).length;
-        const securityCount = result.findings.filter((f) => f.ruleId.startsWith('skill-security')).length;
+        const { specFindings, securityFindings } = summarizeFindings(result.findings);
         // Set outputs
         core.setOutput('passed', result.passed.toString());
         core.setOutput('score', result.passed ? '100' : '0');
-        core.setOutput('spec-compliance', specCount.toString());
-        core.setOutput('security', securityCount.toString());
+        core.setOutput('spec-compliance', specFindings.toString());
+        core.setOutput('security', securityFindings.toString());
         // Write JSON results file
         const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
         const resultsPath = path.join(workspaceDir, 'lgtm-results.json');

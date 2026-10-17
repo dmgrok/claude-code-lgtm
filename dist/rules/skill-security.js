@@ -14,7 +14,13 @@ export class SkillSecurityRule {
     name = 'Skill Security';
     description = 'Scans SKILL.md files for security threats';
     category = 'skills';
-    scanner = new SecurityScanner({ skipSecretDetection: false });
+    scanner;
+    constructor(options = {}) {
+        this.scanner = new SecurityScanner({
+            skipSecretDetection: false,
+            lakeraApiKey: options.lakeraApiKey,
+        });
+    }
     async check(context) {
         const findings = [];
         for (const skillPath of context.files.skillFiles) {

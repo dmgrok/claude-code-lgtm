@@ -1,5 +1,5 @@
 name: 'CC-Tricks Validator'
-description: 'Validate Agent Skills files with scoring and KPI breakdown'
+description: 'Lint Claude Code project configuration (.claude/ settings, hooks, commands) and SKILL.md files for spec and security issues'
 author: 'CC-Tricks'
 branding:
   icon: 'check-circle'
@@ -7,42 +7,38 @@ branding:
 
 inputs:
   path:
-    description: 'Path to SKILL.md file or directory containing skills'
+    description: 'Project directory to check (its .claude/ folder and SKILL.md files)'
     required: true
     default: '.'
-  min-score:
-    description: 'Minimum score to pass (0-100)'
-    required: false
-    default: '70'
   fail-on-error:
-    description: 'Fail the action if validation fails'
+    description: 'Fail the action if any error-severity finding is reported'
     required: false
     default: 'true'
-  skip-duplicates:
-    description: 'Skip duplicate check against public registries'
-    required: false
-    default: 'false'
   lakera-api-key:
-    description: 'Lakera Guard API key for professional prompt injection detection'
+    description: 'Optional Lakera Guard API key. When set, SKILL.md content is also sent to Lakera Guard for ML-based prompt injection detection'
     required: false
     default: ''
+  min-score:
+    description: 'Deprecated and ignored. Checks are rule-based; use fail-on-error instead'
+    required: false
+    deprecationMessage: 'min-score is ignored: cc-tricks reports rule findings, not a numeric score. Use fail-on-error instead.'
+  skip-duplicates:
+    description: 'Deprecated and ignored. Registry duplicate checks were removed'
+    required: false
+    deprecationMessage: 'skip-duplicates is ignored: registry duplicate checks were removed.'
 
 outputs:
-  score:
-    description: 'Global validation score (0-100)'
   passed:
-    description: 'Whether validation passed (true/false)'
+    description: 'Whether the check passed (true/false)'
+  score:
+    description: 'Compatibility output: 100 when the check passed, 0 otherwise'
   spec-compliance:
-    description: 'Spec compliance KPI score'
+    description: 'Number of SKILL.md spec findings (skills/spec)'
   security:
-    description: 'Security KPI score'
-  content:
-    description: 'Content quality KPI score'
-  testing:
-    description: 'Testing & dependencies KPI score'
+    description: 'Number of SKILL.md security findings (skills/security)'
   results-file:
-    description: 'Path to JSON results file for artifact upload'
+    description: 'Path to the JSON results file (lgtm-results.json) for artifact upload'
 
 runs:
-  using: 'node20'
-  main: 'dist/action.js'
+  using: 'node24'
+  main: 'dist/action.cjs'

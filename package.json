@@ -13,14 +13,15 @@
     "presets/"
   ],
   "scripts": {
-    "build": "tsc",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc && npm run build:action && node -e \"require('fs').chmodSync('dist/cli.js', 0o755)\"",
+    "build:action": "esbuild src/action.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/action.cjs --log-level=warning",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint src/",
-    "validate": "tsx src/cli.ts validate",
-    "scan": "tsx src/cli.ts scan",
-    "scaffold": "tsx src/cli.ts scaffold"
+    "lint": "tsc -p tsconfig.lint.json",
+    "check": "tsx src/cli.ts check",
+    "scan": "tsx src/cli.ts scan"
   },
   "keywords": [
     "agent-skills",
@@ -32,7 +33,7 @@
     "github-action",
     "cli"
   ],
-  "author": "",
+  "author": "David Graça",
   "license": "MIT",
   "dependencies": {
     "@actions/core": "^1.10.1",
@@ -41,8 +42,9 @@
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.13.1",
-    "typescript": "^5.7.3",
+    "esbuild": "0.27.2",
     "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
     "vitest": "^4.1.0"
   },
   "engines": {
@@ -50,6 +52,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/dmgrok/LGTM_agent_skills"
+    "url": "git+https://github.com/dmgrok/claude-code-lgtm.git"
+  },
+  "homepage": "https://github.com/dmgrok/claude-code-lgtm#readme",
+  "bugs": {
+    "url": "https://github.com/dmgrok/claude-code-lgtm/issues"
   }
 }

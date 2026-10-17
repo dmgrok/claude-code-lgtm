@@ -19,7 +19,14 @@ export class SkillSecurityRule implements Rule {
   description = 'Scans SKILL.md files for security threats';
   category = 'skills' as const;
 
-  private scanner = new SecurityScanner({ skipSecretDetection: false });
+  private scanner: SecurityScanner;
+
+  constructor(options: { lakeraApiKey?: string } = {}) {
+    this.scanner = new SecurityScanner({
+      skipSecretDetection: false,
+      lakeraApiKey: options.lakeraApiKey,
+    });
+  }
 
   async check(context: RuleContext): Promise<Finding[]> {
     const findings: Finding[] = [];

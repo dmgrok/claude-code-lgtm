@@ -5,6 +5,9 @@ export declare class SkillSecurityRule implements Rule {
     description: string;
     category: "skills";
     private scanner;
+    constructor(options?: {
+        lakeraApiKey?: string;
+    });
     check(context: RuleContext): Promise<Finding[]>;
     private parseSkillFile;
 }
