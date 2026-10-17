@@ -2,7 +2,7 @@
 # CC-Tricks - Claude Code Hook Installer
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/dmgrok/claude-code-tricks-cookbook/main/hooks/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/dmgrok/claude-code-lgtm/main/hooks/install.sh | bash
 #
 # Or manually:
 #   cd your-project && bash path/to/install.sh
@@ -10,7 +10,7 @@
 # This installs:
 #   - Post-edit validation hook (warns on SKILL.md issues)
 #   - Pre-commit gate (blocks commits with failing SKILL.md)
-#   - /lgtm slash command
+#   - /cc-tricks slash command
 
 set -euo pipefail
 
@@ -24,12 +24,12 @@ echo "🔍 CC-Tricks — Claude Code Hook Installer"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Check for lgtm-skills
-if ! command -v lgtm-skills &> /dev/null; then
-  echo "⚠️  lgtm-skills CLI not found. Install with:"
-  echo "   npm install -g lgtm-agent-skills"
+# Check for the cc-tricks CLI
+if ! command -v cc-tricks &> /dev/null; then
+  echo "⚠️  cc-tricks CLI not found. Install with:"
+  echo "   npm install -g github:dmgrok/claude-code-lgtm"
   echo ""
-  echo "   Hooks will still be installed but won't run until lgtm-skills is available."
+  echo "   Hooks will still be installed but won't run until cc-tricks is available."
   echo ""
 fi
 
@@ -37,7 +37,7 @@ fi
 mkdir -p "$HOOKS_DIR" "$COMMANDS_DIR"
 
 # Download hook scripts
-REPO_BASE="https://raw.githubusercontent.com/dmgrok/claude-code-tricks-cookbook/main"
+REPO_BASE="https://raw.githubusercontent.com/dmgrok/claude-code-lgtm/main"
 
 echo "📥 Installing hooks..."
 
@@ -49,8 +49,8 @@ curl -sSL "$REPO_BASE/.claude/hooks/cct-precommit.sh" -o "$HOOKS_DIR/cct-precomm
 chmod +x "$HOOKS_DIR/cct-precommit.sh"
 echo "   ✓ Pre-commit gate hook"
 
-curl -sSL "$REPO_BASE/.claude/commands/lgtm.md" -o "$COMMANDS_DIR/lgtm.md"
-echo "   ✓ /lgtm slash command"
+curl -sSL "$REPO_BASE/.claude/commands/cc-tricks.md" -o "$COMMANDS_DIR/cc-tricks.md"
+echo "   ✓ /cc-tricks slash command"
 
 # Merge settings.json
 if [[ -f "$SETTINGS_FILE" ]]; then
@@ -116,6 +116,6 @@ echo ""
 echo "What's active:"
 echo "  • SKILL.md files are validated after every edit"
 echo "  • git commit is gated — failing skills block commits"
-echo "  • /lgtm command available for on-demand validation"
+echo "  • /cc-tricks command available for on-demand validation"
 echo ""
 echo "Try it: create or edit a SKILL.md and watch the hook fire."

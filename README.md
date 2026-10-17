@@ -1,9 +1,11 @@
 # cc-tricks — Claude Code Tricks Cookbook
 
+[![CI](https://github.com/dmgrok/claude-code-lgtm/actions/workflows/ci.yml/badge.svg)](https://github.com/dmgrok/claude-code-lgtm/actions/workflows/ci.yml)
+
 A CLI toolkit and preset registry for making Claude Code cheaper, faster, and safer. Install battle-tested configurations in one command, or publish your own.
 
 ```bash
-npm install -g github:dmgrok/claude-code-tricks-cookbook
+npm install -g github:dmgrok/claude-code-lgtm
 cc-tricks preset install token-optimizer
 ```
 
@@ -106,9 +108,9 @@ Downloads, caches at `~/.cc-tricks/cache/`, installs like a built-in. To publish
 ## Install
 
 ```bash
-npm install -g github:dmgrok/claude-code-tricks-cookbook
+npm install -g github:dmgrok/claude-code-lgtm
 # or run once:
-npx github:dmgrok/claude-code-tricks-cookbook
+npx github:dmgrok/claude-code-lgtm
 ```
 
 Requires Node >= 18. Optional: `jq` (required by preset hooks).
@@ -193,30 +195,30 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dmgrok/claude-code-tricks-cookbook@main
+      - uses: actions/checkout@v5
+      - uses: dmgrok/claude-code-lgtm@main
         with:
           path: '.'
           fail-on-error: true
 ```
 
+The action runs on Node 24 from a self-contained bundle (`dist/action.cjs`), so no `npm install` step is needed.
+
 | Input | Default | Description |
 |-------|---------|-------------|
-| `path` | `.` | Path to SKILL.md file or directory |
-| `min-score` | `70` | Minimum score to pass (0–100) |
-| `fail-on-error` | `true` | Fail the action if validation fails |
-| `skip-duplicates` | `false` | Skip duplicate check against public registries |
-| `lakera-api-key` | `''` | Lakera Guard API key for ML-based prompt injection |
+| `path` | `.` | Project directory to check (its `.claude/` folder and `SKILL.md` files) |
+| `fail-on-error` | `true` | Fail the action if any error-severity finding is reported |
+| `lakera-api-key` | `''` | Optional Lakera Guard API key; when set, `SKILL.md` content is also sent to Lakera Guard for ML-based prompt injection detection |
+| `min-score` | | Deprecated and ignored (checks are rule-based); use `fail-on-error` |
+| `skip-duplicates` | | Deprecated and ignored (registry duplicate checks were removed) |
 
 | Output | Description |
 |--------|-------------|
-| `score` | Global validation score (0–100) |
-| `passed` | Whether validation passed (true/false) |
-| `spec-compliance` | Spec compliance KPI score |
-| `security` | Security KPI score |
-| `content` | Content quality KPI score |
-| `testing` | Testing & dependencies KPI score |
-| `results-file` | Path to JSON results file for artifact upload |
+| `passed` | Whether the check passed (true/false) |
+| `score` | Compatibility output: `100` when the check passed, `0` otherwise |
+| `spec-compliance` | Number of `SKILL.md` spec findings (`skills/spec`) |
+| `security` | Number of `SKILL.md` security findings (`skills/security`) |
+| `results-file` | Path to the JSON results file (`lgtm-results.json`) for artifact upload |
 
 ## Programmatic API
 
@@ -232,6 +234,19 @@ const metrics = await parseSession('f88a77db-...');
 const estimate = estimateSavings(metrics);
 ```
 
+## Development
+
+```bash
+git clone https://github.com/dmgrok/claude-code-lgtm.git
+cd claude-code-lgtm
+npm ci
+npm run lint     # type-check src, tests and scripts
+npm test         # unit tests (vitest)
+npm run build    # regenerate dist/, including the bundled action dist/action.cjs
+```
+
+`dist/` is committed because the CLI is installed from GitHub and the action runs from it. CI rebuilds it and fails if the committed output is out of date, so commit `dist/` together with source changes.
+
 ## License
 
-MIT
+MIT, see [LICENSE](LICENSE).

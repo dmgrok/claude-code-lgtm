@@ -14,6 +14,6 @@ while IFS= read -r f; do
   [[ "$PASSED" != "true" ]] && FAILURES="$FAILURES\n  \u2022 $f"
 done <<< "$STAGED"
 if [[ -n "$FAILURES" ]]; then
-  echo "\ud83d\udeab LGTM: Failing skills block commit:$FAILURES" >&2
+  echo "\ud83d\udeab CC-Tricks: Failing skills block commit:$FAILURES" >&2
   exit 2
 fi
