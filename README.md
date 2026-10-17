@@ -196,7 +196,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: dmgrok/claude-code-lgtm@main
+      - uses: dmgrok/claude-code-lgtm@v1
         with:
           path: '.'
           fail-on-error: true
