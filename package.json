@@ -1,6 +1,6 @@
 {
   "name": "cc-tricks",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CC-Tricks — Claude Code Cookbook: presets, guardrails, and tricks for Claude Code",
   "type": "module",
   "main": "dist/index.js",
